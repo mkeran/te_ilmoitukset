@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+te_palvelut.csv
+te_palvelut_excel.xlsx
