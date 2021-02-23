@@ -13,31 +13,32 @@ from openpyxl.styles import Font
 logger = logging.getLogger(__name__)
 
 
-def xml_file_to_list(url1:str):
+def xml_file_to_list(url1: str):
     xml = urllib.request.urlopen(url1)
     tree = ET.parse(xml)
     root = tree.getroot()
 
-    del_titles = ["hieroja"]
+    del_titles = get_del_titles()
 
-    # time_cut = dt.datetime(2021, 2, 18, 14, 00, 00) #vvvv,kk,pp,hh,mm,ss
-    last_time_obj = get_last_time_on_file()
+    last_time = get_last_time_on_file()
     time_before_latest = False
     list = []
+    count_skipped_items = 0
 
     for channel in root:
         for item in channel.findall("item"):
             pub_date_text = item.find("pubDate").text
-            if before_time_cut(last_time_obj, pub_date_text):
+            if before_time_cut(last_time, pub_date_text):
                 time_before_latest = True
                 continue
 
-            title:str = item.find("title").text
+            title: str = item.find("title").text
             if title.startswith("Lisää ilmoituksia"):
                 continue
             title_list = title.split(",")  # 0=Työn nimi, -1 = paikkakunta, kaikki välillä oleva on höttöä
             for x in del_titles:
                 if x in title_list[0].lower():
+                    count_skipped_items += 1
                     break
             else: # Continue if the inner loop wasn't broken.
                 url = item.find("link").text
@@ -55,34 +56,41 @@ def xml_file_to_list(url1:str):
         if time_before_latest == False:
             print("Edellisestä latauksesta liian kauan")
             logger.info("Dataa haettu liian harvoin")
-        set_last_time_on_file(channel.findall("item")[0].find("pubDate").text)
+        newtime = channel.findall("item")[0].find("pubDate").text
 
-        logger.info(f"Uusien ilmoitusten määrä: {len(list)}")
-        print(f"Uusien ilmoitusten määrä: {len(list)}")
-        return list
+        logger.info(f"Uusien lisättävien ilmoitusten määrä: {len(list)}")
+        logger.info(f"Hylättyjen ilmoitusten määrä: {count_skipped_items}")
+        print(f"Uusien lisättävien ilmoitusten määrä: {len(list)}")
+        print(f"Hylättyjen ilmoitusten määrä:", count_skipped_items)
+        return list, newtime
 
-# def get_time_obj(text:str):
-#     time_obj = dt.datetime.strptime(text, '%a, %d %b %Y %H:%M:%S %z')
-#     return time_obj
 
 def get_last_time_on_file():
     with open("last_time_obj.txt") as f:
         time = f.read()
-        time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
-        return time_obj
+        # time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
+        return time
+
 
 def set_last_time_on_file(time:str):
     with open("last_time_obj.txt", "w") as f:
         f.write(time)
 
 
-def before_time_cut(time_cut,time:str):
+def before_time_cut(time_cut:str, time:str):
+    time_cut_obj = dt.datetime.strptime(time_cut, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
     time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
     # time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').strftime('%Y %m %d %H:%M:%S')
     # time_obj = dt.datetime.strptime(time_obj, '%Y %m %d %H:%M:%S')
-    if time_obj < time_cut:
+    if time_obj < time_cut_obj:
         return True
     return False
+
+
+def get_del_titles():
+    with open("del_titles.txt", encoding="UTF-8") as f:
+        list = f.read().split("\n")
+    return list
 
 
 def list_to_csv(data:list):
@@ -113,16 +121,17 @@ def list_to_new_excel(data:list, file:str):
 
     workbook.close()
 
-def add_list_to_old_excel(data:list, file:str):
+
+def add_list_to_old_excel(data: list, file: str):
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet1"]
-    row = worksheet.max_row +1
+    worksheet: ws.Worksheet = workbook["Sheet2"]
+    row = worksheet.max_row + 1
 
     print("nrows: ", row)
 
     #luku loppuu, kirjoitus alkaa
 
-    for dicti in data:
+    for dicti in data[::-1]:
         worksheet.append(list(dicti.values()))  #(row, 0, dicti.values())
         cell = worksheet.cell(row, 2)
         cell.hyperlink = cell.value
@@ -131,23 +140,26 @@ def add_list_to_old_excel(data:list, file:str):
     workbook.save(file)
     workbook.close()
 
-def clear_excel(file:str):
+
+def clear_excel(file: str):
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet1"]
+    worksheet: ws.Worksheet = workbook["Sheet2"]
 
     worksheet.delete_rows(2, worksheet.max_row) ##!!!!!!!HUOM muuta ensimmäinen parametri (190)-->2
 
     workbook.save(file)
     workbook.close()
 
+
 def excel_too_full(file:str):
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet1"]
+    worksheet: ws.Worksheet = workbook["Sheet2"]
     bool = False
     if worksheet.max_row > 2000:
         bool = True
     workbook.close()
     return bool
+
 
 def kokeiluxy_main():
     pass
@@ -162,18 +174,25 @@ def kokeiluxy_main():
     # clear_excel(excel_file)
     # add_list_to_old_excel(data, excel_file)
 
+
 def main():
-    logger.info("ollaan mainissa")
+    # logger.info("ollaan mainissa")
     url = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat.rss?alueet=Helsinki,Vantaa,Kerava&ilmoitettuPvm=3&vuokrapaikka=---"
     excel_file = "te_palvelut_excel.xlsx"
     # if excel_too_full(excel_file):
     #     clear_excel(excel_file)
-    data = xml_file_to_list(url)
-    add_list_to_old_excel(data, excel_file)
-
+    logger.info(f"haetaan tiedot {get_last_time_on_file()} lähtien")
+    data, newtime = xml_file_to_list(url)
+    try:
+        add_list_to_old_excel(data, excel_file)
+    except Exception:
+        print("Tietojen vienti exceliin epäonnistui, aikaolio resetoitu")
+        logger.info("Tietojen vienti exceliin epäonnistui")
+    else:
+        print("Uusi aika asetettu")
+        set_last_time_on_file(newtime)
 
 
 if __name__ == '__main__':
-    # testi_main()
-    main()
     # clear_excel("te_palvelut_excel.xlsx")
+    main()

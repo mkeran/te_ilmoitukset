@@ -26,11 +26,9 @@ def time_loop():
         try:
             te_palvelut.main()
         except Exception:
-            logger.exception("kaatui")
+            logger.info("kaatui")
 
         logger.debug("Sleep for: %s seconds", SEC)
         sleep(SEC)
 
-if __name__ == '__main__':
-
-    time_loop()
+time_loop()
