@@ -31,4 +31,5 @@ def time_loop():
         logger.debug("Sleep for: %s seconds", SEC)
         sleep(SEC)
 
-time_loop()
+if __name__ == '__main__':
+    time_loop()

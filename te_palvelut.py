@@ -7,8 +7,9 @@ import openpyxl.worksheet.worksheet as ws
 import openpyxl
 import xlsxwriter
 from openpyxl.styles import Font
+from os import path
 
-###Versio, joka hakee tiedot usein ja lisää edelliseen tiedostoon uudet ilmoitukset
+###Versio, joka hakee tiedot ja lisää edelliseen tiedostoon uudet ilmoitukset
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,6 @@ def set_last_time_on_file(time:str):
 def before_time_cut(time_cut:str, time:str):
     time_cut_obj = dt.datetime.strptime(time_cut, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
     time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').replace(tzinfo=None)
-    # time_obj = dt.datetime.strptime(time, '%a, %d %b %Y %H:%M:%S %z').strftime('%Y %m %d %H:%M:%S')
-    # time_obj = dt.datetime.strptime(time_obj, '%Y %m %d %H:%M:%S')
     if time_obj < time_cut_obj:
         return True
     return False
@@ -93,16 +92,9 @@ def get_del_titles():
     return list
 
 
-def list_to_csv(data:list):
-    csv_file = "te_palvelut.csv"
-    with open(csv_file, "w",newline="") as file:
-        fieldnames = data[0].keys()
-        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter = ";")
-        writer.writeheader()
-        writer.writerows(data)
+def create_excel(data:list, file:str):
+    logger.info("Luodaan tiedostoa: %s", file)
 
-
-def list_to_new_excel(data:list, file:str):
     workbook = xlsxwriter.Workbook(file)
     worksheet = workbook.add_worksheet(name = "Sheet1")
     cell_format = workbook.add_format()
@@ -110,29 +102,27 @@ def list_to_new_excel(data:list, file:str):
 
     worksheet.write_row(0, 0, data[0].keys(), cell_format=cell_format)
 
-    row = 1
-    for dicti in data:
-        worksheet.write_row(row, 0, dicti.values())
-        row += 1
-
-    #muotoilu:
     worksheet.set_column(0, 2, 50)
     worksheet.set_column(3, 4, 30)
 
     workbook.close()
 
 
-def add_list_to_old_excel(data: list, file: str):
+def add_list_to_excel(data: list, file: str):
+    if not path.isfile(file):
+        create_excel(data, file)
+    logger.debug("Lisätään tiedostoon: %s", file)
+
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet2"]
+    worksheet: ws.Worksheet = workbook["Sheet1"]
     row = worksheet.max_row + 1
 
     print("nrows: ", row)
 
     #luku loppuu, kirjoitus alkaa
 
-    for dicti in data[::-1]:
-        worksheet.append(list(dicti.values()))  #(row, 0, dicti.values())
+    for dict in data[::-1]:
+        worksheet.append(list(dict.values()))
         cell = worksheet.cell(row, 2)
         cell.hyperlink = cell.value
         cell.font = Font(underline='single', color='0563C1')
@@ -143,9 +133,9 @@ def add_list_to_old_excel(data: list, file: str):
 
 def clear_excel(file: str):
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet2"]
+    worksheet: ws.Worksheet = workbook["Sheet1"]
 
-    worksheet.delete_rows(2, worksheet.max_row) ##!!!!!!!HUOM muuta ensimmäinen parametri (190)-->2
+    worksheet.delete_rows(2, worksheet.max_row)
 
     workbook.save(file)
     workbook.close()
@@ -153,7 +143,7 @@ def clear_excel(file: str):
 
 def excel_too_full(file:str):
     workbook = openpyxl.load_workbook(file)
-    worksheet: ws.Worksheet = workbook["Sheet2"]
+    worksheet: ws.Worksheet = workbook["Sheet1"]
     bool = False
     if worksheet.max_row > 2000:
         bool = True
@@ -161,30 +151,17 @@ def excel_too_full(file:str):
     return bool
 
 
-def kokeiluxy_main():
-    pass
-    # set_last_time_on_file("Fri, 21 Feb 2021 14:15:50 +0200")
-    # url = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat.rss?alueet=Helsinki,Vantaa,Kerava&ilmoitettuPvm=3&vuokrapaikka=---"
-    # data = xml_file_to_list(url)
-    # print("Datan koko:", len(data))
-    # # print(data)
-    # # list_to_csv(data)
-    # excel_file = "te_palvelut_excel.xlsx"
-    # # list_to_new_excel(excel_file)
-    # clear_excel(excel_file)
-    # add_list_to_old_excel(data, excel_file)
-
-
 def main():
     # logger.info("ollaan mainissa")
     url = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat.rss?alueet=Helsinki,Vantaa,Kerava&ilmoitettuPvm=3&vuokrapaikka=---"
-    excel_file = "te_palvelut_excel.xlsx"
+    excel_file_name = "te_palvelut_excel.xlsx"
+    excel_file = path.abspath(excel_file_name)
     # if excel_too_full(excel_file):
     #     clear_excel(excel_file)
     logger.info(f"haetaan tiedot {get_last_time_on_file()} lähtien")
     data, newtime = xml_file_to_list(url)
     try:
-        add_list_to_old_excel(data, excel_file)
+        add_list_to_excel(data, excel_file)
     except Exception:
         print("Tietojen vienti exceliin epäonnistui, aikaolio resetoitu")
         logger.info("Tietojen vienti exceliin epäonnistui")
