@@ -1,8 +1,8 @@
 # TE-ilmoitukset
-###Ohjelman kuvaus:
+### Ohjelman kuvaus:
 Ohjelma hakee te-palvelut.fi sivulta RSS-syötteenä uusimmat työpaikkailmoitukset ja listaa ne exceliin.
 
-###Esimerkkikäyttö oletusarvoilla:
+### Esimerkkikäyttö oletusarvoilla:
 
 Aineiston voi noutaa kertaluonteisesti komennolla 
 ```python 
@@ -14,7 +14,7 @@ tai automaattisesti noin 25 min (1500 sec) välein komennolla
 python run_loop.py
 ```
 
-###Lisätietoja ohjelmasta:
+### Lisätietoja ohjelmasta:
 Ohjelma on tarkoitettu helpottamaan te-palvelut.fi sivun
 työilmoitusten läpikäyntiä. Te-palveluiden työnhakusivulta
 ei saa listattua ilmoituksia uusimmasta vanhimpaan, vaan 
@@ -33,7 +33,7 @@ ajaa noin 4 kertaa päivässä). Tätä varten ohjelma sisältää
 aikakatkaisulla toimivan pääohjelman (run_loop.py), joka ajaa 
 varsinaisen koodin (te_palvelut.py).
 
-###Lisätietoja käytöstä:
+### Lisätietoja käytöstä:
 * Tee [te-palvelut.fi](https://paikat.te-palvelut.fi/tpt/) sivulla työpaikkailmoitushaku valinnaisilla spekseillä ja muodosta oikeassa kulmassa olevasta RSS- painikkeesta XML-tiedosto. Kopioi url ja liitä te_palvelut.py tiedoston main()-funktioon url-muuttujaan.
 
 * Määritä del_titles.txt -tiedostoon allekkain hakusanat, joita et halua sisältyvän ilmoitusten otsikoissa.
