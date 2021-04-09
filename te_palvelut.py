@@ -14,56 +14,70 @@ from os import path
 logger = logging.getLogger(__name__)
 
 
-def xml_file_to_list(url1: str):
-    xml = urllib.request.urlopen(url1)
+def check_item(item):
+    del_titles = get_del_titles()
+    last_load_time = get_last_time_on_file()
+
+    pub_date_text = item.find("pubDate").text
+    if before_time_cut(last_load_time, pub_date_text):
+        return None
+
+    title: str = item.find("title").text
+    if title.startswith("Lisää ilmoituksia"):
+        return None
+
+    title_list = title.split(",")  # 0=Työn nimi, -1 = paikkakunta, kaikki välillä oleva on höttöä
+    for x in del_titles:
+        if len(x) < 3:
+            continue
+        if x in title_list[0].lower():
+            return None
+
+    data = {}
+    data["Otsikko"] = title_list[0]
+    data["Linkki"] = item.find("link").text
+    data["Lisätietoja"] = ",".join(title_list[1:-1])
+    data["Paikkakunta"] = title_list[-1]
+    data["Julkaistu"] = dt.datetime.strptime(pub_date_text, '%a, %d %b %Y %H:%M:%S %z').strftime(
+        '%Y %m %d %H:%M:%S')
+    return data
+
+
+def check_pubdates(channel):
+    last_load_time = get_last_time_on_file()
+    time_before_latest = False
+    for item in channel.findall("item"):
+        pub_date_text = item.find("pubDate").text
+        if before_time_cut(last_load_time, pub_date_text):
+            time_before_latest = True
+
+    if time_before_latest == False:
+        logger.info("Dataa haettu liian harvoin")
+
+    newtime = channel.findall("item")[0].find("pubDate").text
+    return newtime
+
+
+def xml_file_to_list(xml: bin):
     tree = ET.parse(xml)
     root = tree.getroot()
 
-    del_titles = get_del_titles()
-
-    last_time = get_last_time_on_file()
-    time_before_latest = False
-    list = []
+    results = []
     count_skipped_items = 0
 
     for channel in root:
+        newtime = check_pubdates(channel)
         for item in channel.findall("item"):
-            pub_date_text = item.find("pubDate").text
-            if before_time_cut(last_time, pub_date_text):
-                time_before_latest = True
+            data = check_item(item)
+            if data == None:
+                count_skipped_items += 1
                 continue
+            results.append(data)
 
-            title: str = item.find("title").text
-            if title.startswith("Lisää ilmoituksia"):
-                continue
-            title_list = title.split(",")  # 0=Työn nimi, -1 = paikkakunta, kaikki välillä oleva on höttöä
-            for x in del_titles:
-                if x in title_list[0].lower():
-                    count_skipped_items += 1
-                    break
-            else: # Continue if the inner loop wasn't broken.
-                url = item.find("link").text
+    logger.info(f"Uusien lisättävien ilmoitusten määrä: {len(results)}")
+    logger.info(f"Hylättyjen ilmoitusten määrä: {count_skipped_items}")
 
-                data = {}
-                data["Otsikko"] = title_list[0]
-                data["Linkki"] = url
-                data["Lisätietoja"] = ",".join(title_list[1:-1])
-                data["Paikkakunta"] = title_list[-1]
-                data["Julkaistu"] = dt.datetime.strptime(pub_date_text, '%a, %d %b %Y %H:%M:%S %z').strftime('%Y %m %d %H:%M:%S')
-                list.append(data)
-
-            continue # Inner loop was broken, continue the outer.
-
-        if time_before_latest == False:
-            print("Edellisestä latauksesta liian kauan")
-            logger.info("Dataa haettu liian harvoin")
-        newtime = channel.findall("item")[0].find("pubDate").text
-
-        logger.info(f"Uusien lisättävien ilmoitusten määrä: {len(list)}")
-        logger.info(f"Hylättyjen ilmoitusten määrä: {count_skipped_items}")
-        print(f"Uusien lisättävien ilmoitusten määrä: {len(list)}")
-        print(f"Hylättyjen ilmoitusten määrä:", count_skipped_items)
-        return list, newtime
+    return results, newtime
 
 
 def get_last_time_on_file():
@@ -117,7 +131,7 @@ def add_list_to_excel(data: list, file: str):
     worksheet: ws.Worksheet = workbook["Sheet1"]
     row = worksheet.max_row + 1
 
-    print("nrows: ", row)
+    logger.debug("Rivien määrä: %s", str(row + len(data) - 1))
 
     #luku loppuu, kirjoitus alkaa
 
@@ -140,6 +154,15 @@ def clear_excel(file: str):
     workbook.save(file)
     workbook.close()
 
+def delete_nrows_from_excel(file:str, nrows: int):
+    workbook = openpyxl.load_workbook(file)
+    worksheet: ws.Worksheet = workbook["Sheet1"]
+
+    worksheet.delete_rows(2, nrows)
+
+    workbook.save(file)
+    workbook.close()
+
 
 def excel_too_full(file:str):
     workbook = openpyxl.load_workbook(file)
@@ -156,14 +179,15 @@ def main():
     url = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat.rss?alueet=Helsinki,Vantaa,Kerava&ilmoitettuPvm=3&vuokrapaikka=---"
     excel_file_name = "te_palvelut_excel.xlsx"
     excel_file = path.abspath(excel_file_name)
-    # if excel_too_full(excel_file):
-    #     clear_excel(excel_file)
+    if excel_too_full(excel_file):
+        delete_nrows_from_excel(excel_file, 1000)
     logger.info(f"haetaan tiedot {get_last_time_on_file()} lähtien")
-    data, newtime = xml_file_to_list(url)
+    xml = urllib.request.urlopen(url)
+
+    data, newtime = xml_file_to_list(xml)
     try:
         add_list_to_excel(data, excel_file)
     except Exception:
-        print("Tietojen vienti exceliin epäonnistui, aikaolio resetoitu")
         logger.info("Tietojen vienti exceliin epäonnistui")
     else:
         print("Uusi aika asetettu")

@@ -21,7 +21,6 @@ SEC = 1500
 
 
 def time_loop():
-    logger.info("skripti alkaa")
     while True:
         try:
             te_palvelut.main()
