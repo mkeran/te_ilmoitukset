@@ -179,8 +179,9 @@ def main():
     url = "https://paikat.te-palvelut.fi/tpt-api/tyopaikat.rss?alueet=Helsinki,Vantaa,Kerava&ilmoitettuPvm=3&vuokrapaikka=---"
     excel_file_name = "te_palvelut_excel.xlsx"
     excel_file = path.abspath(excel_file_name)
-    if excel_too_full(excel_file):
-        delete_nrows_from_excel(excel_file, 1000)
+    if path.isfile(excel_file):
+        if excel_too_full(excel_file):
+            delete_nrows_from_excel(excel_file, 1000)
     logger.info(f"haetaan tiedot {get_last_time_on_file()} lähtien")
     xml = urllib.request.urlopen(url)
 
